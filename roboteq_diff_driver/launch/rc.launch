@@ -1,0 +1,23 @@
+<launch>
+
+  <arg name="dev" default="/dev/input/js0" />
+
+  <!-- Launch joy node -->
+  <node pkg="joy" type="joy_node" name="joy">
+    <param name="dev" value="$(arg dev)" /> <!-- Customize this to match the location your joystick is plugged in on-->
+    <param name="deadzone" value="0.1" />
+    <param name="autorepeat_rate" value="10" />
+    <param name="coalesce_interval" value="0.025" />
+  </node>
+
+  <node name="$(anon teleop_twist_joy)" pkg="teleop_twist_joy" type="teleop_node">
+    <param name="enable_button" value="0" />
+    <param name="enable_turbo_button" value="-1" />
+    <param name="axis_linear" value="1" />
+    <param name="scale_linear" value="1" />
+    <param name="scale_linear_turbo" value="1" />
+    <param name="axis_angular" value="0" />
+    <param name="scale_angular" value="1.0" />
+  </node>
+
+</launch>

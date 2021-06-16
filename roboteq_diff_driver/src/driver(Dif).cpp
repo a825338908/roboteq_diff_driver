@@ -14,7 +14,7 @@
 //
 
 // Define following to enable cmdvel debug output
-//#define _CMDVEL_DEBUG
+#define _CMDVEL_DEBUG
 
 // Define following to enable motor test mode
 //  Runs both motors in forward direction at 10% of configured maximum (rpms in close_loop mode, power in open_loop mode)
@@ -206,25 +206,25 @@ MainNode::MainNode() :
   ROS_INFO_STREAM("cmdvel_topic: " << cmdvel_topic);
   nhLocal.param<std::string>("odom_topic", odom_topic, "odom");
   ROS_INFO_STREAM("odom_topic: " << odom_topic);
-  nhLocal.param<std::string>("port_front", port_front, "/dev/driveComPort");
+  nhLocal.param<std::string>("port_front", port_front, "/dev/motor_f");
   ROS_INFO_STREAM("port_front: " << port_front);
   nhLocal.param<std::string>("port_rear", port_rear, "/dev/motor_r");
   ROS_INFO_STREAM("port_rear: " << port_rear);
   nhLocal.param("baud", baud, 115200);
   ROS_INFO_STREAM("baud: " << baud);
 
-  nhLocal.param("wheel_circumference", wheel_circumference, 0.5124);
+  nhLocal.param("wheel_circumference", wheel_circumference, 0.638048);
   ROS_INFO_STREAM("wheel_circumference: " << wheel_circumference);
-  nhLocal.param("track_width", track_width, 0.4318);
+  nhLocal.param("track_width", track_width, 0.47); //0.47
   ROS_INFO_STREAM("track_width: " << track_width);
-  nhLocal.param("wheels_x_distance", wheels_x_distance, 0.49); // TODO  0.43  real_x 0.43 real_y 0.49
+  nhLocal.param("wheels_x_distance", wheels_x_distance, 0.38); // TODO  0.43  real_x 0.43 real_y 0.49
   ROS_INFO_STREAM("wheels_x_distance: " << wheels_x_distance);
-  nhLocal.param("wheels_y_distance", wheels_y_distance, 0.43); // TODO  0.26
+  nhLocal.param("wheels_y_distance", wheels_y_distance, 0.47); // TODO  0.26
   ROS_INFO_STREAM("wheels_y_distance: " << wheels_y_distance);
 
-  nhLocal.param("encoder_ppr", encoder_ppr, 500);
+  nhLocal.param("encoder_ppr", encoder_ppr, 1024);
   ROS_INFO_STREAM("encoder_ppr: " << encoder_ppr);
-  nhLocal.param("encoder_cpr", encoder_cpr, 2000);
+  nhLocal.param("encoder_cpr", encoder_cpr, 1024);
   ROS_INFO_STREAM("encoder_cpr: " << encoder_cpr);
 
 }
@@ -261,19 +261,35 @@ void MainNode::cmdvel_callback( const geometry_msgs::Twist& twist_msg)
   //convert rad/s to rad/min
   angular_vel_z_mins = angular_z * 60;
 
-  //tangential_vel = angular_vel_z_mins * ((wheels_x_distance / 2) + (wheels_y_distance / 2));
-  tangential_vel = angular_vel_z_mins * wheels_y_distance;
+  tangential_vel = angular_vel_z_mins * ((wheels_x_distance / 2) + (wheels_y_distance / 2));
+  //tangential_vel = angular_vel_z_mins * wheels_y_distance;
 //  wheel_circumference = 0.471238898;
   x_rpm = linear_vel_x_mins / wheel_circumference;
   y_rpm = linear_vel_y_mins / wheel_circumference;
   tan_rpm = tangential_vel / wheel_circumference;
-
+/*
   int32_t front_left_rpm = x_rpm - y_rpm - tan_rpm; //rpm1
   int32_t front_right_rpm = x_rpm + y_rpm + tan_rpm;//rpm2
   int32_t rear_left_rpm = x_rpm + y_rpm - tan_rpm;//rpm3
   int32_t rear_right_rpm = x_rpm - y_rpm + tan_rpm;//rpm4
+*/
+
+  float front_left_rpm = x_rpm - y_rpm - tan_rpm; //rpmf2
+  float front_right_rpm = x_rpm + y_rpm + tan_rpm;//rpmf1
+
+  float rear_left_rpm = x_rpm + y_rpm - tan_rpm;//rpmr2
+  float rear_right_rpm = x_rpm - y_rpm + tan_rpm;//rpmr1
 
 // --mecan
+
+
+
+
+  front_right_cmd << "!S 1 " << front_right_rpm << "\r"; //7.3
+  front_left_cmd << "!S 2 " << front_left_rpm<< "\r";
+
+  rear_left_cmd << "!S 1 " << rear_right_rpm<< "\r";
+  rear_right_cmd << "!S 2 " << rear_left_rpm << "\r";
 
   #ifdef _CMDVEL_DEBUG
   ROS_INFO_STREAM("cmdvel linear x: " << linear_x << " y: " << linear_y);
@@ -281,15 +297,6 @@ void MainNode::cmdvel_callback( const geometry_msgs::Twist& twist_msg)
   ROS_INFO_STREAM("cmdvel rpm front_right: " << front_right_rpm << " front_left: " << front_left_rpm);
   ROS_INFO_STREAM("cmdvel rpm rear_right: " << rear_right_rpm << " rear_left: " << rear_left_rpm);
   #endif
-
-
-  front_right_cmd << "!S 2 " << front_right_rpm*6 << "\r";
-  front_left_cmd << "!S 1 " << front_left_rpm*6<< "\r";
-
-  rear_left_cmd << "!S 1 " << rear_left_rpm*6 << "\r";
-  rear_right_cmd << "!S 2 " << rear_right_rpm*6<< "\r";
-
-
 
 #ifndef _CMDVEL_FORCE_RUN
   controller_front.write(front_right_cmd.str());
@@ -604,7 +611,7 @@ void MainNode::odom_publish()
   average_rps_x = ((float)(rpm1 + rpm2 + rpm3 + rpm4)/4)/60; // RPM
   float linear_x = average_rps_x * wheel_circumference; // m/s
   #ifdef _ODOM_DEBUG
-  ROS_INFO_STREAM("wheel_circumference: 0.4" << wheel_circumference);
+  ROS_INFO_STREAM("wheel_circumference:" << wheel_circumference);
   ROS_INFO_STREAM("average_rps_x: " << average_rps_x);
   ROS_INFO_STREAM("linear_x: " << linear_x);
   #endif
@@ -748,7 +755,7 @@ int MainNode::run()
   mstimer = starttime;
   lstimer = starttime;
 
-  ros::Rate loop_rate(100);
+//  ros::Rate loop_rate(10);
 
   ROS_INFO("Beginning looping...");
 
@@ -790,7 +797,8 @@ int MainNode::run()
     }
 
     ros::spinOnce();
-    loop_rate.sleep();
+
+//    loop_rate.sleep();
   }
 
   if ( controller_front.isOpen() )

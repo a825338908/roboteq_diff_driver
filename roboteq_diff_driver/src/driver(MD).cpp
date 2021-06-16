@@ -206,9 +206,9 @@ MainNode::MainNode() :
   ROS_INFO_STREAM("cmdvel_topic: " << cmdvel_topic);
   nhLocal.param<std::string>("odom_topic", odom_topic, "odom");
   ROS_INFO_STREAM("odom_topic: " << odom_topic);
-  nhLocal.param<std::string>("port_front", port_front, "/dev/driveComPort");
+  nhLocal.param<std::string>("port_front", port_front, "/dev/ttyUSB0");
   ROS_INFO_STREAM("port_front: " << port_front);
-  nhLocal.param<std::string>("port_rear", port_rear, "/dev/motor_r");
+  nhLocal.param<std::string>("port_rear", port_rear, "/dev/ttyUSB1");
   ROS_INFO_STREAM("port_rear: " << port_rear);
   nhLocal.param("baud", baud, 115200);
   ROS_INFO_STREAM("baud: " << baud);
@@ -273,6 +273,8 @@ void MainNode::cmdvel_callback( const geometry_msgs::Twist& twist_msg)
   int32_t rear_left_rpm = x_rpm + y_rpm - tan_rpm;//rpm3
   int32_t rear_right_rpm = x_rpm - y_rpm + tan_rpm;//rpm4
 
+  rear_left_rpm = rear_left_rpm * -1;
+  front_left_rpm = front_left_rpm * -1;
 // --mecan
 
   #ifdef _CMDVEL_DEBUG
@@ -283,11 +285,11 @@ void MainNode::cmdvel_callback( const geometry_msgs::Twist& twist_msg)
   #endif
 
 
-  front_right_cmd << "!S 2 " << front_right_rpm*6 << "\r";
-  front_left_cmd << "!S 1 " << front_left_rpm*6<< "\r";
+  front_right_cmd << "!S 1 " << front_right_rpm*-1*6 << "\r"; //7.3
+  front_left_cmd << "!S 2 " << front_left_rpm*6<< "\r";
 
   rear_left_cmd << "!S 1 " << rear_left_rpm*6 << "\r";
-  rear_right_cmd << "!S 2 " << rear_right_rpm*6<< "\r";
+  rear_right_cmd << "!S 2 " << rear_right_rpm*-1*6 << "\r";
 
 
 
@@ -748,7 +750,7 @@ int MainNode::run()
   mstimer = starttime;
   lstimer = starttime;
 
-  ros::Rate loop_rate(100);
+//  ros::Rate loop_rate(10);
 
   ROS_INFO("Beginning looping...");
 
@@ -790,7 +792,8 @@ int MainNode::run()
     }
 
     ros::spinOnce();
-    loop_rate.sleep();
+
+//    loop_rate.sleep();
   }
 
   if ( controller_front.isOpen() )

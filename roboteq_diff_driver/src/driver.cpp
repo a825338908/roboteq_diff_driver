@@ -202,11 +202,11 @@ MainNode::MainNode() :
   ROS_INFO_STREAM("odom_frame: " << odom_frame);
   nhLocal.param<std::string>("base_frame", base_frame, "base_link");
   ROS_INFO_STREAM("base_frame: " << base_frame);
-  nhLocal.param<std::string>("cmdvel_topic", cmdvel_topic, "cmd_vel");
+  nhLocal.param<std::string>("cmdvel_topic", cmdvel_topic, "/yocs_cmd_vel_mux/cmd_vel");
   ROS_INFO_STREAM("cmdvel_topic: " << cmdvel_topic);
   nhLocal.param<std::string>("odom_topic", odom_topic, "odom");
   ROS_INFO_STREAM("odom_topic: " << odom_topic);
-  nhLocal.param<std::string>("port_front", port_front, "/dev/driveComPort");
+  nhLocal.param<std::string>("port_front", port_front, "/dev/motor_f");
   ROS_INFO_STREAM("port_front: " << port_front);
   nhLocal.param<std::string>("port_rear", port_rear, "/dev/motor_r");
   ROS_INFO_STREAM("port_rear: " << port_rear);

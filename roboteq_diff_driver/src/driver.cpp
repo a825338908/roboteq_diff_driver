@@ -31,7 +31,7 @@
 //
 
 // Define following to enable odom debug output
-//#define _ODOM_DEBUG
+#define _ODOM_DEBUG
 #define _ODOM_ENABLED
 
 
@@ -157,12 +157,11 @@ protected:
   std::string port_rear;
   int baud;
   double wheel_circumference;
-  double track_width;
   double wheels_x_distance;
   double wheels_y_distance;
   int encoder_ppr;
   int encoder_cpr;
-
+  double speed_factor;
 };
 
 MainNode::MainNode() :
@@ -186,11 +185,11 @@ MainNode::MainNode() :
   pub_odom_tf(true),
   baud(115200),
   wheel_circumference(0),
-  track_width(0),
   wheels_x_distance(0),
   wheels_y_distance(0),
   encoder_ppr(0),
-  encoder_cpr(0)
+  encoder_cpr(0),
+  speed_factor(0.0)
 {
 
 
@@ -202,7 +201,7 @@ MainNode::MainNode() :
   ROS_INFO_STREAM("odom_frame: " << odom_frame);
   nhLocal.param<std::string>("base_frame", base_frame, "base_link");
   ROS_INFO_STREAM("base_frame: " << base_frame);
-  nhLocal.param<std::string>("cmdvel_topic", cmdvel_topic, "/yocs_cmd_vel_mux/cmd_vel");
+  nhLocal.param<std::string>("cmdvel_topic", cmdvel_topic, "cmd_vel");
   ROS_INFO_STREAM("cmdvel_topic: " << cmdvel_topic);
   nhLocal.param<std::string>("odom_topic", odom_topic, "odom");
   ROS_INFO_STREAM("odom_topic: " << odom_topic);
@@ -215,17 +214,18 @@ MainNode::MainNode() :
 
   nhLocal.param("wheel_circumference", wheel_circumference, 0.5124);
   ROS_INFO_STREAM("wheel_circumference: " << wheel_circumference);
-  nhLocal.param("track_width", track_width, 0.4318);
-  ROS_INFO_STREAM("track_width: " << track_width);
-  nhLocal.param("wheels_x_distance", wheels_x_distance, 0.49); // TODO  0.43  real_x 0.43 real_y 0.49
+  nhLocal.param("wheels_x_distance", wheels_x_distance, 0.50); // TODO  0.43  real_x 0.43 real_y 0.49
   ROS_INFO_STREAM("wheels_x_distance: " << wheels_x_distance);
-  nhLocal.param("wheels_y_distance", wheels_y_distance, 0.43); // TODO  0.26
+  nhLocal.param("wheels_y_distance", wheels_y_distance, 0.53); // TODO  0.26
   ROS_INFO_STREAM("wheels_y_distance: " << wheels_y_distance);
 
   nhLocal.param("encoder_ppr", encoder_ppr, 500);
   ROS_INFO_STREAM("encoder_ppr: " << encoder_ppr);
   nhLocal.param("encoder_cpr", encoder_cpr, 2000);
   ROS_INFO_STREAM("encoder_cpr: " << encoder_cpr);
+  nhLocal.param("speed_factor", speed_factor, 7.3);
+  ROS_INFO_STREAM("speed_factor: " << speed_factor);
+
 
 }
 
@@ -261,8 +261,8 @@ void MainNode::cmdvel_callback( const geometry_msgs::Twist& twist_msg)
   //convert rad/s to rad/min
   angular_vel_z_mins = angular_z * 60;
 
-  //tangential_vel = angular_vel_z_mins * ((wheels_x_distance / 2) + (wheels_y_distance / 2));
-  tangential_vel = angular_vel_z_mins * wheels_y_distance;
+  tangential_vel = angular_vel_z_mins * ((wheels_x_distance / 2) + (wheels_y_distance / 2));
+  //tangential_vel = angular_vel_z_mins * wheels_y_distance;
 //  wheel_circumference = 0.471238898;
   x_rpm = linear_vel_x_mins / wheel_circumference;
   y_rpm = linear_vel_y_mins / wheel_circumference;
@@ -283,11 +283,11 @@ void MainNode::cmdvel_callback( const geometry_msgs::Twist& twist_msg)
   #endif
 
 
-  front_right_cmd << "!S 2 " << front_right_rpm*6 << "\r";
-  front_left_cmd << "!S 1 " << front_left_rpm*6<< "\r";
+  front_right_cmd << "!S 2 " << front_right_rpm*speed_factor << "\r"; //7.3
+  front_left_cmd << "!S 1 " << front_left_rpm*speed_factor<< "\r";
 
-  rear_left_cmd << "!S 1 " << rear_left_rpm*6 << "\r";
-  rear_right_cmd << "!S 2 " << rear_right_rpm*6<< "\r";
+  rear_left_cmd << "!S 1 " << rear_left_rpm*speed_factor << "\r";
+  rear_right_cmd << "!S 2 " << rear_right_rpm*speed_factor << "\r";
 
 
 
@@ -330,7 +330,7 @@ void MainNode::cmdvel_setup()
   //controller.write("^RWD 500\r");
 
   ROS_INFO_STREAM("Subscribing to topic " << cmdvel_topic);
-  cmdvel_sub = nh.subscribe(cmdvel_topic, 1000, &MainNode::cmdvel_callback, this);
+  cmdvel_sub = nh.subscribe(cmdvel_topic, 1, &MainNode::cmdvel_callback, this);
 
 }
 
@@ -388,7 +388,7 @@ void MainNode::odom_setup()
   }
 
   ROS_INFO_STREAM("Publishing to topic " << odom_topic);
-  odom_pub = nh.advertise<nav_msgs::Odometry>(odom_topic, 1000);
+  odom_pub = nh.advertise<nav_msgs::Odometry>(odom_topic, 100);
 
 #ifdef _ODOM_COVAR_SERVER
   ROS_INFO("Advertising service on roboteq/odom_covar_srv");
@@ -471,8 +471,10 @@ void MainNode::odom_front_loop()
           if (odom_buf_front[delim] == ':')
           {
             odom_buf_front[delim] = 0;
-            odom_encoder_front_right = (int32_t)strtol(odom_buf_front+3, NULL, 10);
-            odom_encoder_front_left = ((int32_t)strtol(odom_buf_front+delim+1, NULL, 10))*-1;
+            //odom_encoder_front_right = (int32_t)strtol(odom_buf_front+3, NULL, 10);
+            //odom_encoder_front_left = ((int32_t)strtol(odom_buf_front+delim+1, NULL, 10));
+            odom_encoder_front_right = ((int32_t)strtol(odom_buf_front+delim+1, NULL, 10));
+            odom_encoder_front_left = (int32_t)strtol(odom_buf_front+3, NULL, 10);
             #ifdef _ODOM_DEBUG
             ROS_INFO_STREAM("encoder front right: " << odom_encoder_front_right << " left: " << odom_encoder_front_left);
             #endif
@@ -526,7 +528,7 @@ void MainNode::odom_rear_loop()
           if (odom_buf_rear[delim] == ':')
           {
             odom_buf_rear[delim] = 0;
-            odom_encoder_rear_left = ((int32_t)strtol(odom_buf_rear+3, NULL, 10))*-1;
+            odom_encoder_rear_left = ((int32_t)strtol(odom_buf_rear+3, NULL, 10));
             odom_encoder_rear_right = (int32_t)strtol(odom_buf_rear+delim+1, NULL, 10);
             #ifdef _ODOM_DEBUG
             ROS_INFO_STREAM("encoder rear right: " << odom_encoder_rear_right << " left: " << odom_encoder_rear_left);
@@ -566,28 +568,16 @@ void MainNode::odom_publish()
 //  ROS_INFO_STREAM("dtm: " << dtm);
   odom_last_time = nowtime;
 
-  // determine deltas of distance and angle
-  //float linear = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference + (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / 2.0;
-  //float angular = ((float)odom_encoder_right / (float)encoder_cpr * wheel_circumference - (float)odom_encoder_left / (float)encoder_cpr * wheel_circumference) / track_width;
-
 //mecan
-//odom_encoder_front_left
-//odom_encoder_front_right
-//odom_encoder_rear_left
-//odom_encoder_rear_left
-//(delta_ticks / counts_per_rev_) / dtm;
 
-  float rpm1 = (float)odom_encoder_front_left*60/(float)encoder_cpr;//( (float)odom_encoder_front_left / (float)encoder_cpr ) / dtm;
-  float rpm2 = (float)odom_encoder_front_right*60/(float)encoder_cpr;//( (float)odom_encoder_front_right / (float)encoder_cpr ) / dtm;
+  float rpm1 = (float)odom_encoder_front_left*60/(float)encoder_cpr*-1;//( (float)odom_encoder_front_left / (float)encoder_cpr ) / dtm;
+  float rpm2 = (float)odom_encoder_front_right*60/(float)encoder_cpr*-1;//( (float)odom_encoder_front_right / (float)encoder_cpr ) / dtm;
   float rpm3 = (float)odom_encoder_rear_left*60/(float)encoder_cpr;//( (float)odom_encoder_rear_left / (float)encoder_cpr ) / dtm;
   float rpm4 = (float)odom_encoder_rear_right*60/(float)encoder_cpr;//( (float)odom_encoder_rear_right / (float)encoder_cpr ) / dtm;
 
-/*
-  int rpm1 = (float)odom_encoder_front_left/ (float)encoder_cpr/dtm;
-  int rpm2 = (float)odom_encoder_front_right/ (float)encoder_cpr/dtm;
-  int rpm3 = (float)odom_encoder_rear_left/ (float)encoder_cpr/dtm;
-  int rpm4 = (float)odom_encoder_rear_right/ (float)encoder_cpr/dtm;
-*/
+  rpm1 = rpm1*-1;
+  rpm2 = rpm2*-1;
+
   #ifdef _ODOM_DEBUG
   ROS_INFO_STREAM("rpm1 front_left: " << rpm1);
   ROS_INFO_STREAM("rpm2 front_right: " << rpm2);
@@ -604,7 +594,6 @@ void MainNode::odom_publish()
   average_rps_x = ((float)(rpm1 + rpm2 + rpm3 + rpm4)/4)/60; // RPM
   float linear_x = average_rps_x * wheel_circumference; // m/s
   #ifdef _ODOM_DEBUG
-  ROS_INFO_STREAM("wheel_circumference: 0.4" << wheel_circumference);
   ROS_INFO_STREAM("average_rps_x: " << average_rps_x);
   ROS_INFO_STREAM("linear_x: " << linear_x);
   #endif
@@ -631,7 +620,7 @@ void MainNode::odom_publish()
 
   // Update odometry
 
-  double delta_yaw = angular*dt;
+  double delta_yaw = angular*dt*1.2;
   double delta_x = (linear_x * cos(odom_yaw) - linear_y * sin(odom_yaw)) * dt;
   double delta_y = (linear_x * sin(odom_yaw) + linear_y * cos(odom_yaw)) * dt;
 
@@ -691,7 +680,7 @@ void MainNode::odom_publish()
   odom_msg.twist.twist.angular.x = 0.0;
   odom_msg.twist.twist.angular.y = 0.0;
   odom_msg.twist.twist.angular.z = angular;
-  //odom_pub.publish(odom_msg);
+  odom_pub.publish(odom_msg);
 
 }
 
@@ -748,7 +737,7 @@ int MainNode::run()
   mstimer = starttime;
   lstimer = starttime;
 
-  ros::Rate loop_rate(100);
+  ros::Rate loop_rate(1000);
 
   ROS_INFO("Beginning looping...");
 
